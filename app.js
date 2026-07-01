@@ -15,7 +15,7 @@ const HEARTBEAT_INTERVAL_MS = 15 * 1000; // cada cuánto avisa "sigo acá"
 // falsa alarma. 3 minutos da margen real para ese flujo sin tardar
 // demasiado en detectar un abandono genuino.
 const HEARTBEAT_STALE_MS = 3 * 60 * 1000;
-const ROOM_EXPIRATION_MS = 1 * 60 * 1000;
+const ROOM_EXPIRATION_MS = 2 * 60 * 1000;
 
 // Margen de gracia antes de cerrar la sala cuando el rival deja de figurar
 // como presente. Evita que un simple refresh (F5) —que desconecta y
@@ -292,12 +292,8 @@ async function unirsePartida(code){
       inputCode.value = '';
       return;
     }
-    const room = snap.val();
 
-    if(room.players.creator === clientId || room.players.joiner === clientId){
-      entrarASala(code);
-      return;
-    }
+    const room = snap.val();
 
     const lastSignal =
       room.lastActivity ||
@@ -305,17 +301,19 @@ async function unirsePartida(code){
       room.createdAt;
 
     if(lastSignal && (Date.now() - lastSignal > ROOM_EXPIRATION_MS)){
-      ref.remove().catch(() => {});
-      homeError.textContent = 'Ese link de invitación ya no es válido (Crea nueva partida).';
+      await ref.remove().catch(() => {});
+
+      homeError.textContent =
+        'Ese link de invitación ya no es válido (Crea nueva partida).';
+
       limpiarCodigoDeUrl();
       inputCode.value = '';
+
       return;
     }
 
-    if(room.players.joiner){
-      homeError.textContent = 'Esa sala ya está completa.';
-      limpiarCodigoDeUrl();
-      inputCode.value = '';
+    if(room.players.creator === clientId || room.players.joiner === clientId){
+      entrarASala(code);
       return;
     }
 
