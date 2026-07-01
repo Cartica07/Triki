@@ -3,10 +3,13 @@
 // ===================================================
 
 const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // sin 0/O/1/I/L, evita confusiones
-// Cuánto puede esperar una sala sin que se una nadie antes de considerarse
-// abandonada. Se chequea solo cuando alguien intenta unirse (no depende de
-// detectar desconexiones, que en el celular saltan solas al cambiar de app).
-const WAITING_ROOM_TTL_MS = 20 * 60 * 1000; // 20 minutos
+
+// "Latido" que manda el creador mientras espera rival, para poder detectar
+// salas abandonadas sin depender de eventos de desconexión (que en el
+// celular saltan solos al cambiar de app, dando falsos positivos).
+const HEARTBEAT_INTERVAL_MS = 15 * 1000; // cada cuánto avisa "sigo acá"
+const HEARTBEAT_STALE_MS = 60 * 1000;    // sin señal hace más de esto = sala abandonada
+
 const WIN_LINES = [
   [0,1,2],[3,4,5],[6,7,8],
   [0,3,6],[1,4,7],[2,5,8],
@@ -41,6 +44,7 @@ let currentRoomCode = null;
 let mySymbol = null; // 'X' | 'O'
 let clientId = getOrCreateClientId();
 let renderedMarks = new Set(); // índices que ya tienen su <span class="mark"> puesto
+let heartbeatTimer = null;
 
 // ---------- referencias DOM ----------
 const views = {
@@ -99,6 +103,14 @@ function init(){
   btnLeave.addEventListener('click', () => salir(true));
   btnRematch.addEventListener('click', pedirRevancha);
   btnShare.addEventListener('click', compartirLink);
+
+  // Si se cierra la pestaña/navegador de verdad (no solo cambiar de app),
+  // intentamos cerrar la sala al toque como respaldo del heartbeat.
+  window.addEventListener('pagehide', () => {
+    if(currentRoomCode){
+      eliminarSalaBeacon(currentRoomCode);
+    }
+  });
 
   // Si entraron por un link compartido (?code=XXXX), los metemos directo
   // a la partida sin que tengan que tocar "Unirse".
@@ -209,7 +221,8 @@ async function crearPartida(){
       symbols: {},
       winner: null,
       round: 0,
-      createdAt: firebase.database.ServerValue.TIMESTAMP
+      createdAt: firebase.database.ServerValue.TIMESTAMP,
+      heartbeat: firebase.database.ServerValue.TIMESTAMP
     };
     const ref = db.ref('rooms/' + code);
     await ref.set(room);
@@ -249,17 +262,32 @@ async function unirsePartida(code){
     const ref = db.ref('rooms/' + code);
     const snap = await ref.get();
     if(!snap.exists()){
-      homeError.textContent = 'Ese link de invitación ya no es válido (la sala se cerró).';
+      homeError.textContent = 'Ese link de invitación ya no es válido (Crea nueva partida).';
       limpiarCodigoDeUrl();
       inputCode.value = '';
       return;
     }
     const room = snap.val();
 
-    // Reconexión: ya sos parte de esta sala
+    // Reconexión: ya sos parte de esta sala (aunque el heartbeat esté viejo,
+    // sos vos mismo volviendo, así que entrás igual)
     if(room.players.creator === clientId || room.players.joiner === clientId){
       entrarASala(code);
       return;
+    }
+
+    // Sala esperando rival pero sin señal de vida reciente del creador
+    // (cerró la pestaña de verdad, se le murió la batería, etc.) → la damos
+    // por abandonada, la limpiamos, y mandamos a esta persona a crear la suya.
+    if(room.status === 'waiting'){
+      const lastSignal = room.heartbeat || room.createdAt;
+      if(lastSignal && (Date.now() - lastSignal > HEARTBEAT_STALE_MS)){
+        ref.remove().catch(() => {});
+        homeError.textContent = 'Ese link de invitación ya no es válido (Crea nueva partida).';
+        limpiarCodigoDeUrl();
+        inputCode.value = '';
+        return;
+      }
     }
 
     if(room.players.joiner){
@@ -327,6 +355,17 @@ function salir(deleteRoom = true){
   limpiarCodigoDeUrl();
 }
 
+// Borrado "de emergencia" al cerrar la pestaña de verdad (evento pagehide).
+// Usa fetch con keepalive para que el pedido sobreviva a la descarga de la
+// página, algo que un fetch normal no garantiza.
+function eliminarSalaBeacon(code){
+  if(!code) return;
+  try{
+    const url = FIREBASE_CONFIG.databaseURL + '/rooms/' + code + '.json';
+    fetch(url, { method: 'DELETE', keepalive: true });
+  }catch(e){ /* si falla, el heartbeat lo va a limpiar igual */ }
+}
+
 // Saca el ?code=XXXX de la barra de direcciones (sin recargar la página)
 // para que un link de invitación viejo/usado no quede "pegado" en la URL.
 function limpiarCodigoDeUrl(){
@@ -342,6 +381,30 @@ function resetLocalState(){
   clearMarks();
   hideWinLine();
   gameResult.classList.add('hidden');
+  detenerHeartbeat();
+}
+
+// ===================================================
+// Heartbeat (solo lo manda el creador, mientras espera rival)
+// ===================================================
+function iniciarHeartbeatSiCorresponde(room){
+  const soyCreadorEsperando = room && room.players.creator === clientId && room.status === 'waiting';
+  if(!soyCreadorEsperando){
+    detenerHeartbeat();
+    return;
+  }
+  if(heartbeatTimer) return; // ya está corriendo
+  const ref = db.ref('rooms/' + currentRoomCode + '/heartbeat');
+  heartbeatTimer = setInterval(() => {
+    ref.set(firebase.database.ServerValue.TIMESTAMP);
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+function detenerHeartbeat(){
+  if(heartbeatTimer){
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
 }
 
 // ===================================================
@@ -350,12 +413,14 @@ function resetLocalState(){
 function onRoomUpdate(snapshot){
   const room = snapshot.val();
   if(!room){
-    // La sala ya no existe: se cerró (el creador se desconectó, alguien se fue,
+    // La sala ya no existe: se cerró (el creador la cerró, el rival se fue,
     // o el link de invitación apuntaba a una sala vieja/inexistente).
     // No hay nada que borrar de nuevo, solo mandamos a esta persona al home.
     salir(false);
     return;
   }
+
+  iniciarHeartbeatSiCorresponde(room);
 
   mySymbol = room.symbols ? room.symbols[clientId] : null;
 
