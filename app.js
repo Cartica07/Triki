@@ -8,7 +8,13 @@ const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // sin 0/O/1/I/L, evita co
 // salas abandonadas sin depender de eventos de desconexión (que en el
 // celular saltan solos al cambiar de app, dando falsos positivos).
 const HEARTBEAT_INTERVAL_MS = 15 * 1000; // cada cuánto avisa "sigo acá"
-const HEARTBEAT_STALE_MS = 60 * 1000;    // sin señal hace más de esto = sala abandonada
+// Antes eran 60s, pero cuando el creador comparte el link (WhatsApp, etc.)
+// el navegador pasa a segundo plano y los setInterval se pausan/frenan ahí,
+// así que el heartbeat se congela mientras se elige el contacto y se manda
+// el mensaje. 60s se cumplía fácil en ese lapso y borraba la sala por una
+// falsa alarma. 3 minutos da margen real para ese flujo sin tardar
+// demasiado en detectar un abandono genuino.
+const HEARTBEAT_STALE_MS = 3 * 60 * 1000;
 
 // Margen de gracia antes de cerrar la sala cuando el rival deja de figurar
 // como presente. Evita que un simple refresh (F5) —que desconecta y
@@ -132,6 +138,10 @@ function buildRoomLink(code){
 
 async function compartirLink(){
   if(!currentRoomCode) return;
+  // Reseteamos el heartbeat justo antes de que el navegador pase a segundo
+  // plano por el share sheet, así el reloj de "abandono" arranca de nuevo
+  // desde este instante en vez de depender del último tick del setInterval.
+  db.ref('rooms/' + currentRoomCode + '/heartbeat').set(firebase.database.ServerValue.TIMESTAMP).catch(() => {});
   const url = buildRoomLink(currentRoomCode);
   const shareData = {
     title: 'Triki Frente',
@@ -398,6 +408,16 @@ function iniciarHeartbeatSiCorresponde(room){
     ref.set(firebase.database.ServerValue.TIMESTAMP);
   }, HEARTBEAT_INTERVAL_MS);
 }
+
+// Cuando volvés de segundo plano (ej: volviste de WhatsApp después de
+// compartir el link), el setInterval de arriba puede haber estado pausado
+// todo ese rato. En vez de esperar a que dispare de nuevo, mandamos un
+// heartbeat al toque para resetear el reloj de "sala abandonada".
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && heartbeatTimer && currentRoomCode){
+    db.ref('rooms/' + currentRoomCode + '/heartbeat').set(firebase.database.ServerValue.TIMESTAMP);
+  }
+});
 
 function detenerHeartbeat(){
   if(heartbeatTimer){
