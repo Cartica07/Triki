@@ -92,7 +92,7 @@ function init(){
     unirsePartida(inputCode.value.trim().toUpperCase());
   });
   btnCancelWait.addEventListener('click', cancelarEspera);
-  btnLeave.addEventListener('click', salir);
+  btnLeave.addEventListener('click', () => salir(true));
   btnRematch.addEventListener('click', pedirRevancha);
   btnShare.addEventListener('click', compartirLink);
 
@@ -111,7 +111,7 @@ async function compartirLink(){
   if(!currentRoomCode) return;
   const url = buildRoomLink(currentRoomCode);
   const shareData = {
-    title: 'Triki Online',
+    title: 'Triki Frente',
     text: 'Unite a mi partida de Triki (código ' + currentRoomCode + ')',
     url
   };
@@ -207,7 +207,12 @@ async function crearPartida(){
       round: 0,
       createdAt: firebase.database.ServerValue.TIMESTAMP
     };
-    await db.ref('rooms/' + code).set(room);
+    const ref = db.ref('rooms/' + code);
+    await ref.set(room);
+    // Si se corta la conexión del creador (cierra la pestaña, pierde señal, etc.)
+    // Firebase borra la sala solo, del lado del servidor, sin depender de que
+    // nuestro JS siga corriendo. Así el link de invitación deja de servir.
+    ref.onDisconnect().remove();
     entrarASala(code);
   }catch(err){
     console.error(err);
@@ -244,7 +249,9 @@ async function unirsePartida(code){
     const ref = db.ref('rooms/' + code);
     const snap = await ref.get();
     if(!snap.exists()){
-      homeError.textContent = 'No existe ninguna sala con ese código.';
+      homeError.textContent = 'Ese link de invitación ya no es válido (Crea una partida nueva).';
+      limpiarCodigoDeUrl();
+      inputCode.value = '';
       return;
     }
     const room = snap.val();
@@ -257,6 +264,8 @@ async function unirsePartida(code){
 
     if(room.players.joiner){
       homeError.textContent = 'Esa sala ya está completa.';
+      limpiarCodigoDeUrl();
+      inputCode.value = '';
       return;
     }
 
@@ -284,6 +293,10 @@ function entrarASala(code){
   currentRoomCode = code;
   roomRef = db.ref('rooms/' + code);
   roomRef.on('value', onRoomUpdate);
+  // dejamos el código en la URL para poder reconectar si se refresca la página
+  const url = new URL(location.href);
+  url.searchParams.set('code', code);
+  history.replaceState(null, '', url.pathname + url.search);
 }
 
 function cancelarEspera(){
@@ -297,12 +310,29 @@ function cancelarEspera(){
   }
   resetLocalState();
   showView('home');
+  limpiarCodigoDeUrl();
 }
 
-function salir(){
-  if(roomRef) roomRef.off('value', onRoomUpdate);
+function salir(deleteRoom = true){
+  if(roomRef){
+    roomRef.off('value', onRoomUpdate);
+    if(deleteRoom && currentRoomCode){
+      // Cerrar la sala para ambos: al rival, su propio listener de onRoomUpdate
+      // va a recibir room=null y lo va a mandar al home automáticamente.
+      db.ref('rooms/' + currentRoomCode).remove().catch(() => {});
+    }
+  }
   resetLocalState();
   showView('home');
+  limpiarCodigoDeUrl();
+}
+
+// Saca el ?code=XXXX de la barra de direcciones (sin recargar la página)
+// para que un link de invitación viejo/usado no quede "pegado" en la URL.
+function limpiarCodigoDeUrl(){
+  if(location.search){
+    history.replaceState(null, '', location.pathname);
+  }
 }
 
 function resetLocalState(){
@@ -320,7 +350,10 @@ function resetLocalState(){
 function onRoomUpdate(snapshot){
   const room = snapshot.val();
   if(!room){
-    salir();
+    // La sala ya no existe: se cerró (el creador se desconectó, alguien se fue,
+    // o el link de invitación apuntaba a una sala vieja/inexistente).
+    // No hay nada que borrar de nuevo, solo mandamos a esta persona al home.
+    salir(false);
     return;
   }
 
