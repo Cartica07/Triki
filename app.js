@@ -317,6 +317,13 @@ async function unirsePartida(code){
       return;
     }
 
+    if(room.players.joiner){
+      homeError.textContent = 'Esa sala ya está completa.';
+      limpiarCodigoDeUrl();
+      inputCode.value = '';
+      return;
+    }
+
     const creatorStarts = Math.random() < 0.5;
     const symbols = {
       [room.players.creator]: creatorStarts ? 'X' : 'O',
