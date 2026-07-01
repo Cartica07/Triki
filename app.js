@@ -10,6 +10,15 @@ const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // sin 0/O/1/I/L, evita co
 const HEARTBEAT_INTERVAL_MS = 15 * 1000; // cada cuánto avisa "sigo acá"
 const HEARTBEAT_STALE_MS = 60 * 1000;    // sin señal hace más de esto = sala abandonada
 
+// Presencia en tiempo real (detecta cierre de pestaña de forma confiable,
+// usando onDisconnect() de Firebase en vez de depender del evento pagehide).
+// El margen de gracia evita que un simple refresh (F5) —que desconecta y
+// reconecta el socket en menos de un segundo— se confunda con un cierre real.
+const PRESENCE_GRACE_MS = 5 * 1000;
+
+// Si pasa más de esto sin que se juegue una ficha, la partida se cierra sola.
+const INACTIVITY_LIMIT_MS = 60 * 1000;
+
 const WIN_LINES = [
   [0,1,2],[3,4,5],[6,7,8],
   [0,3,6],[1,4,7],[2,5,8],
@@ -45,6 +54,9 @@ let mySymbol = null; // 'X' | 'O'
 let clientId = getOrCreateClientId();
 let renderedMarks = new Set(); // índices que ya tienen su <span class="mark"> puesto
 let heartbeatTimer = null;
+let presenceRef = null;        // rooms/{code}/lastSeen/{clientId} — mi nodo de presencia
+let presenceGraceTimer = null; // cuenta regresiva antes de dar al rival por desconectado
+let inactivityTimer = null;    // cuenta regresiva de "1 minuto sin jugadas"
 
 // ---------- referencias DOM ----------
 const views = {
@@ -68,6 +80,7 @@ const resultText = document.getElementById('result-text');
 const btnRematch = document.getElementById('btn-rematch');
 const btnLeave = document.getElementById('btn-leave');
 const connStatus = document.getElementById('connection-status');
+const btnRestartMatch = document.getElementById('btn-restart-match');
 
 // ===================================================
 // Arranque
