@@ -15,6 +15,7 @@ const HEARTBEAT_INTERVAL_MS = 15 * 1000; // cada cuánto avisa "sigo acá"
 // falsa alarma. 3 minutos da margen real para ese flujo sin tardar
 // demasiado en detectar un abandono genuino.
 const HEARTBEAT_STALE_MS = 3 * 60 * 1000;
+const ROOM_EXPIRATION_MS = 1 * 60 * 1000;
 
 // Margen de gracia antes de cerrar la sala cuando el rival deja de figurar
 // como presente. Evita que un simple refresh (F5) —que desconecta y
@@ -233,7 +234,8 @@ async function crearPartida(){
       winner: null,
       round: 0,
       createdAt: firebase.database.ServerValue.TIMESTAMP,
-      heartbeat: firebase.database.ServerValue.TIMESTAMP
+      heartbeat: firebase.database.ServerValue.TIMESTAMP,
+      lastActivity: firebase.database.ServerValue.TIMESTAMP
     };
     const ref = db.ref('rooms/' + code);
     await ref.set(room);
@@ -285,15 +287,17 @@ async function unirsePartida(code){
       return;
     }
 
-    if(room.status === 'waiting'){
-      const lastSignal = room.heartbeat || room.createdAt;
-      if(lastSignal && (Date.now() - lastSignal > HEARTBEAT_STALE_MS)){
-        ref.remove().catch(() => {});
-        homeError.textContent = 'Ese link de invitación ya no es válido (Crea nueva partida).';
-        limpiarCodigoDeUrl();
-        inputCode.value = '';
-        return;
-      }
+    const lastSignal =
+      room.lastActivity ||
+      room.heartbeat ||
+      room.createdAt;
+
+    if(lastSignal && (Date.now() - lastSignal > ROOM_EXPIRATION_MS)){
+      ref.remove().catch(() => {});
+      homeError.textContent = 'Ese link de invitación ya no es válido (Crea nueva partida).';
+      limpiarCodigoDeUrl();
+      inputCode.value = '';
+      return;
     }
 
     if(room.players.joiner){
@@ -313,7 +317,8 @@ async function unirsePartida(code){
       'players/joiner': clientId,
       symbols: symbols,
       status: 'playing',
-      turn: 'X'
+      turn: 'X',
+      lastActivity: firebase.database.ServerValue.TIMESTAMP
     });
     entrarASala(code);
   }catch(err){
@@ -637,6 +642,7 @@ function jugar(i){
     if(room.board[i]) return room;
 
     room.board[i] = mySymbol;
+    room.lastActivity = Date.now();
 
     const winInfo = checkWinner(room.board);
     if(winInfo && winInfo.winner){
@@ -673,6 +679,7 @@ function reiniciarPartida(){
     room.winner = null;
     room.turn = 'X';
     room.round = (room.round || 0) + 1;
+    room.lastActivity = Date.now();
     return room;
   });
 }
