@@ -322,14 +322,26 @@ body{
 
 /* ---------- HUD de juego ---------- */
 .game-header{
-  display:grid;
-  grid-template-columns: 1fr auto auto 1fr;
-  align-items:center;
-  width:100%;
-  gap:8px;
+    display: grid;
+    grid-template-columns: minmax(85px,1fr) auto minmax(85px,1fr);
+
+    align-items: center;
+    width: 100%;
+
+    gap: 10px;
 }
-.game-header > .tag:first-child{ justify-self:start; }
-.game-header > .tag:last-child{ justify-self:end; }
+
+.game-header .tag:first-child{
+    justify-self: start;
+}
+
+.game-header > .tag:first-child{
+    justify-self:start;
+}
+
+.game-header > .tag:last-of-type{
+    justify-self:end;
+}
 
 .game-title{
   justify-self:center;
@@ -405,9 +417,33 @@ body{
   font-weight: 700;
 }
 /* ---------- botón reiniciar partida ---------- */
+/* ---------- botón reiniciar partida ---------- */
+
 #btn-restart-match{
-  justify-self:center;
-  padding: 8px 12px;
-  font-size: 0.8rem;
-  white-space: nowrap;
+    position:absolute;
+
+    right:14px;
+    bottom:14px;
+
+    background:var(--panel-bg);
+
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+
+    border:1px solid var(--border);
+    border-radius:8px;
+
+    color:var(--text);
+
+    font-family:'Space Grotesk', sans-serif;
+    font-size:0.72rem;
+
+    padding:8px 12px;
+
+    cursor:pointer;
+
+    z-index:20;
+}
+#btn-restart-match:active{
+  transform: scale(.96);
 }
