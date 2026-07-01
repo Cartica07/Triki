@@ -32,6 +32,18 @@ const WIN_LINES = [
 const GRID_X = [22.3, 40.7, 61.1, 80.4];
 const GRID_Y = [20.6, 30.0, 40.4, 51.9];
 
+const sonidoPoner = new Audio('poner.mp3');
+sonidoPoner.preload = 'auto';
+
+document.addEventListener('click', () => {
+  sonidoPoner.play()
+    .then(() => {
+      sonidoPoner.pause();
+      sonidoPoner.currentTime = 0.04;
+    })
+    .catch(() => {});
+}, { once: true });
+
 function getCellBox(i){
   const row = Math.floor(i / 3);
   const col = i % 3;
@@ -541,7 +553,7 @@ function renderJuego(room){
     }else if(room.winner === mySymbol){
       resultText.textContent = '¡Ganaste! 🎉';
     }else{
-      resultText.textContent = 'Perdiste. La próxima.';
+      resultText.textContent = 'Perdiste 😢';
     }
     turnIndicator.textContent = 'Terminó';
   }else{
@@ -565,6 +577,8 @@ function syncMarks(board, winLine){
       span.style.top = box.centerY + '%';
       span.dataset.i = i;
       boardLayer.appendChild(span);
+      sonidoPoner.currentTime = 0.04;
+      sonidoPoner.play().catch(() => {});
       renderedMarks.add(i);
     }
   });
@@ -642,6 +656,8 @@ function jugar(i){
     if(room.board[i]) return room;
 
     room.board[i] = mySymbol;
+    sonidoPoner.currentTime = 0;
+    sonidoPoner.play().catch(() => {});
     room.lastActivity = Date.now();
 
     const winInfo = checkWinner(room.board);
