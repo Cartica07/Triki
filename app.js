@@ -474,7 +474,7 @@ function onRoomUpdate(snapshot){
   }
 
   iniciarHeartbeatSiCorresponde(room);
-  vigilarPresenciaRival(room);
+  //vigilarPresenciaRival(room);
 
   mySymbol = room.symbols ? room.symbols[clientId] : null;
 
