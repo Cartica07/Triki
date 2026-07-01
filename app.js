@@ -3,6 +3,10 @@
 // ===================================================
 
 const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // sin 0/O/1/I/L, evita confusiones
+// Cuánto puede esperar una sala sin que se una nadie antes de considerarse
+// abandonada. Se chequea solo cuando alguien intenta unirse (no depende de
+// detectar desconexiones, que en el celular saltan solas al cambiar de app).
+const WAITING_ROOM_TTL_MS = 20 * 60 * 1000; // 20 minutos
 const WIN_LINES = [
   [0,1,2],[3,4,5],[6,7,8],
   [0,3,6],[1,4,7],[2,5,8],
@@ -209,10 +213,6 @@ async function crearPartida(){
     };
     const ref = db.ref('rooms/' + code);
     await ref.set(room);
-    // Si se corta la conexión del creador (cierra la pestaña, pierde señal, etc.)
-    // Firebase borra la sala solo, del lado del servidor, sin depender de que
-    // nuestro JS siga corriendo. Así el link de invitación deja de servir.
-    ref.onDisconnect().remove();
     entrarASala(code);
   }catch(err){
     console.error(err);
@@ -249,7 +249,7 @@ async function unirsePartida(code){
     const ref = db.ref('rooms/' + code);
     const snap = await ref.get();
     if(!snap.exists()){
-      homeError.textContent = 'Ese link de invitación ya no es válido (Crea una partida nueva).';
+      homeError.textContent = 'Ese link de invitación ya no es válido (la sala se cerró).';
       limpiarCodigoDeUrl();
       inputCode.value = '';
       return;
