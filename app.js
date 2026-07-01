@@ -437,24 +437,41 @@ function getOpponentId(room){
 }
 
 function vigilarPresenciaRival(room){
+
   const opponentId = getOpponentId(room);
 
-  // todavía no hay rival (sala en espera): nada que vigilar
+  // todavía no hay rival
   if(!opponentId){
-    if(presenceGraceTimer){ clearTimeout(presenceGraceTimer); presenceGraceTimer = null; }
+    if(presenceGraceTimer){
+      clearTimeout(presenceGraceTimer);
+      presenceGraceTimer = null;
+    }
     return;
   }
 
   const presence = room.presence || {};
-  const opponentPresent = !!presence[opponentId];
 
-  if(opponentPresent){
-    if(presenceGraceTimer){ clearTimeout(presenceGraceTimer); presenceGraceTimer = null; }
+  // NUEVO:
+  // mientras Firebase termina de crear los nodos de presencia
+  // no asumimos que el rival desapareció.
+  if(Object.keys(presence).length < 2){
+    if(presenceGraceTimer){
+      clearTimeout(presenceGraceTimer);
+      presenceGraceTimer = null;
+    }
     return;
   }
 
-  // el rival no figura como presente: le damos un margen corto (puede ser
-  // solo un refresh de página) antes de cerrar la sala para los dos
+  const opponentPresent = !!presence[opponentId];
+
+  if(opponentPresent){
+    if(presenceGraceTimer){
+      clearTimeout(presenceGraceTimer);
+      presenceGraceTimer = null;
+    }
+    return;
+  }
+
   if(!presenceGraceTimer){
     presenceGraceTimer = setTimeout(() => {
       presenceGraceTimer = null;
@@ -474,7 +491,7 @@ function onRoomUpdate(snapshot){
   }
 
   iniciarHeartbeatSiCorresponde(room);
-  //vigilarPresenciaRival(room);
+  vigilarPresenciaRival(room);
 
   mySymbol = room.symbols ? room.symbols[clientId] : null;
 
