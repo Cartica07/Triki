@@ -10,14 +10,10 @@ const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // sin 0/O/1/I/L, evita co
 const HEARTBEAT_INTERVAL_MS = 15 * 1000; // cada cuánto avisa "sigo acá"
 const HEARTBEAT_STALE_MS = 60 * 1000;    // sin señal hace más de esto = sala abandonada
 
-// Presencia en tiempo real (detecta cierre de pestaña de forma confiable,
-// usando onDisconnect() de Firebase en vez de depender del evento pagehide).
-// El margen de gracia evita que un simple refresh (F5) —que desconecta y
+// Margen de gracia antes de cerrar la sala cuando el rival deja de figurar
+// como presente. Evita que un simple refresh (F5) —que desconecta y
 // reconecta el socket en menos de un segundo— se confunda con un cierre real.
 const PRESENCE_GRACE_MS = 5 * 1000;
-
-// Si pasa más de esto sin que se juegue una ficha, la partida se cierra sola.
-const INACTIVITY_LIMIT_MS = 60 * 1000;
 
 const WIN_LINES = [
   [0,1,2],[3,4,5],[6,7,8],
@@ -26,7 +22,6 @@ const WIN_LINES = [
 ];
 
 // Límites de la grilla medidos sobre assets/board-bg.jpg (en % del contenedor)
-// x: líneas verticales | y: líneas horizontales
 const GRID_X = [22.3, 40.7, 61.1, 80.4];
 const GRID_Y = [20.6, 30.0, 40.4, 51.9];
 
@@ -52,11 +47,10 @@ let roomRef = null;
 let currentRoomCode = null;
 let mySymbol = null; // 'X' | 'O'
 let clientId = getOrCreateClientId();
-let renderedMarks = new Set(); // índices que ya tienen su <span class="mark"> puesto
+let renderedMarks = new Set();
 let heartbeatTimer = null;
-let presenceRef = null;        // rooms/{code}/lastSeen/{clientId} — mi nodo de presencia
+let presenceRef = null;        // rooms/{code}/presence/{clientId} — mi nodo de presencia
 let presenceGraceTimer = null; // cuenta regresiva antes de dar al rival por desconectado
-let inactivityTimer = null;    // cuenta regresiva de "1 minuto sin jugadas"
 
 // ---------- referencias DOM ----------
 const views = {
@@ -117,16 +111,16 @@ function init(){
   btnRematch.addEventListener('click', pedirRevancha);
   btnShare.addEventListener('click', compartirLink);
 
-  // Si se cierra la pestaña/navegador de verdad (no solo cambiar de app),
-  // intentamos cerrar la sala al toque como respaldo del heartbeat.
-  window.addEventListener('pagehide', () => {
-    if(currentRoomCode){
-      eliminarSalaBeacon(currentRoomCode);
-    }
-  });
+  // OJO: si en algún momento agregás/sacás botones del HTML, esta guarda
+  // evita que un getElementById que devuelve null tire abajo TODO el script
+  // (addEventListener sobre null revienta y ninguno de los botones de arriba
+  // quedaría conectado). Por eso el de reiniciar va con chequeo aparte:
+  if(btnRestartMatch){
+    btnRestartMatch.addEventListener('click', reiniciarPartida);
+  }else{
+    console.warn('No se encontró el botón #btn-restart-match en el HTML — revisá el id.');
+  }
 
-  // Si entraron por un link compartido (?code=XXXX), los metemos directo
-  // a la partida sin que tengan que tocar "Unirse".
   if(codeFromUrl && codeFromUrl.trim().length === 4){
     unirsePartida(codeFromUrl.trim().toUpperCase());
   }
@@ -151,8 +145,7 @@ async function compartirLink(){
     }
     throw new Error('no-web-share');
   }catch(err){
-    if(err.name === 'AbortError') return; // el usuario cerró el share sheet, no hacemos nada más
-    // navigator.share no disponible (ej: PC): copiamos el link como respaldo.
+    if(err.name === 'AbortError') return;
     try{
       await navigator.clipboard.writeText(url);
       flashShareButton('¡Link copiado!');
@@ -172,7 +165,6 @@ function flashShareButton(msg){
   }, 1500);
 }
 
-// crea los 9 botones invisibles posicionados sobre las líneas de la foto
 function buildCells(){
   for(let i = 0; i < 9; i++){
     const box = getCellBox(i);
@@ -197,14 +189,10 @@ function listenConnectionState(){
 function getOrCreateClientId(){
   let id = localStorage.getItem('triki_client_id');
   if(!id){
-    // crypto.randomUUID() solo existe en contextos seguros (https o localhost).
-    // Si no está disponible (ej: probando por http://IP-local:puerto), generamos
-    // un id igual de único pero sin caracteres inválidos para claves de Firebase
-    // (nada de ".", "#", "$", "/", "[", "]" — Math.random() de más produce ".").
     if(crypto.randomUUID){
       id = crypto.randomUUID();
     }else{
-      const rand = Math.random().toString(36).slice(2); // sin punto, base36
+      const rand = Math.random().toString(36).slice(2);
       id = 'c-' + Date.now().toString(36) + '-' + rand;
     }
     localStorage.setItem('triki_client_id', id);
@@ -282,16 +270,11 @@ async function unirsePartida(code){
     }
     const room = snap.val();
 
-    // Reconexión: ya sos parte de esta sala (aunque el heartbeat esté viejo,
-    // sos vos mismo volviendo, así que entrás igual)
     if(room.players.creator === clientId || room.players.joiner === clientId){
       entrarASala(code);
       return;
     }
 
-    // Sala esperando rival pero sin señal de vida reciente del creador
-    // (cerró la pestaña de verdad, se le murió la batería, etc.) → la damos
-    // por abandonada, la limpiamos, y mandamos a esta persona a crear la suya.
     if(room.status === 'waiting'){
       const lastSignal = room.heartbeat || room.createdAt;
       if(lastSignal && (Date.now() - lastSignal > HEARTBEAT_STALE_MS)){
@@ -310,7 +293,6 @@ async function unirsePartida(code){
       return;
     }
 
-    // Se completa la sala: acá se tira la moneda para ver quién arranca con X
     const creatorStarts = Math.random() < 0.5;
     const symbols = {
       [room.players.creator]: creatorStarts ? 'X' : 'O',
@@ -333,8 +315,18 @@ async function unirsePartida(code){
 function entrarASala(code){
   currentRoomCode = code;
   roomRef = db.ref('rooms/' + code);
+
+  // ---- presencia en tiempo real ----
+  // Le decimos a Firebase: "si en algún momento se corta mi conexión de
+  // verdad (cierro la pestaña, pierdo señal, mato la app), borrá mi nodo
+  // de presencia". Esto lo ejecuta el SERVIDOR ni bien detecta el corte,
+  // sin depender de que mi navegador alcance a avisar nada antes de morir.
+  presenceRef = db.ref('rooms/' + code + '/presence/' + clientId);
+  presenceRef.onDisconnect().remove();
+  presenceRef.set(true);
+
   roomRef.on('value', onRoomUpdate);
-  // dejamos el código en la URL para poder reconectar si se refresca la página
+
   const url = new URL(location.href);
   url.searchParams.set('code', code);
   history.replaceState(null, '', url.pathname + url.search);
@@ -358,8 +350,6 @@ function salir(deleteRoom = true){
   if(roomRef){
     roomRef.off('value', onRoomUpdate);
     if(deleteRoom && currentRoomCode){
-      // Cerrar la sala para ambos: al rival, su propio listener de onRoomUpdate
-      // va a recibir room=null y lo va a mandar al home automáticamente.
       db.ref('rooms/' + currentRoomCode).remove().catch(() => {});
     }
   }
@@ -368,19 +358,6 @@ function salir(deleteRoom = true){
   limpiarCodigoDeUrl();
 }
 
-// Borrado "de emergencia" al cerrar la pestaña de verdad (evento pagehide).
-// Usa fetch con keepalive para que el pedido sobreviva a la descarga de la
-// página, algo que un fetch normal no garantiza.
-function eliminarSalaBeacon(code){
-  if(!code) return;
-  try{
-    const url = FIREBASE_CONFIG.databaseURL + '/rooms/' + code + '.json';
-    fetch(url, { method: 'DELETE', keepalive: true });
-  }catch(e){ /* si falla, el heartbeat lo va a limpiar igual */ }
-}
-
-// Saca el ?code=XXXX de la barra de direcciones (sin recargar la página)
-// para que un link de invitación viejo/usado no quede "pegado" en la URL.
 function limpiarCodigoDeUrl(){
   if(location.search){
     history.replaceState(null, '', location.pathname);
@@ -388,7 +365,16 @@ function limpiarCodigoDeUrl(){
 }
 
 function resetLocalState(){
+  if(presenceRef){
+    presenceRef.onDisconnect().cancel();
+    presenceRef.remove().catch(() => {});
+  }
+  if(presenceGraceTimer){
+    clearTimeout(presenceGraceTimer);
+    presenceGraceTimer = null;
+  }
   roomRef = null;
+  presenceRef = null;
   currentRoomCode = null;
   mySymbol = null;
   clearMarks();
@@ -406,7 +392,7 @@ function iniciarHeartbeatSiCorresponde(room){
     detenerHeartbeat();
     return;
   }
-  if(heartbeatTimer) return; // ya está corriendo
+  if(heartbeatTimer) return;
   const ref = db.ref('rooms/' + currentRoomCode + '/heartbeat');
   heartbeatTimer = setInterval(() => {
     ref.set(firebase.database.ServerValue.TIMESTAMP);
@@ -421,19 +407,54 @@ function detenerHeartbeat(){
 }
 
 // ===================================================
+// Detectar al rival desconectado (una vez que ya está en la sala)
+// ===================================================
+function getOpponentId(room){
+  if(!room.players) return null;
+  if(room.players.creator === clientId) return room.players.joiner || null;
+  if(room.players.joiner === clientId) return room.players.creator || null;
+  return null;
+}
+
+function vigilarPresenciaRival(room){
+  const opponentId = getOpponentId(room);
+
+  // todavía no hay rival (sala en espera): nada que vigilar
+  if(!opponentId){
+    if(presenceGraceTimer){ clearTimeout(presenceGraceTimer); presenceGraceTimer = null; }
+    return;
+  }
+
+  const presence = room.presence || {};
+  const opponentPresent = !!presence[opponentId];
+
+  if(opponentPresent){
+    if(presenceGraceTimer){ clearTimeout(presenceGraceTimer); presenceGraceTimer = null; }
+    return;
+  }
+
+  // el rival no figura como presente: le damos un margen corto (puede ser
+  // solo un refresh de página) antes de cerrar la sala para los dos
+  if(!presenceGraceTimer){
+    presenceGraceTimer = setTimeout(() => {
+      presenceGraceTimer = null;
+      db.ref('rooms/' + currentRoomCode).remove().catch(() => {});
+    }, PRESENCE_GRACE_MS);
+  }
+}
+
+// ===================================================
 // Render en tiempo real
 // ===================================================
 function onRoomUpdate(snapshot){
   const room = snapshot.val();
   if(!room){
-    // La sala ya no existe: se cerró (el creador la cerró, el rival se fue,
-    // o el link de invitación apuntaba a una sala vieja/inexistente).
-    // No hay nada que borrar de nuevo, solo mandamos a esta persona al home.
     salir(false);
     return;
   }
 
   iniciarHeartbeatSiCorresponde(room);
+  vigilarPresenciaRival(room);
 
   mySymbol = room.symbols ? room.symbols[clientId] : null;
 
@@ -491,7 +512,6 @@ function renderJuego(room){
   }
 }
 
-// crea/actualiza los <span class="mark"> encima de cada celda ocupada
 function syncMarks(board, winLine){
   board.forEach((val, i) => {
     if(val && !renderedMarks.has(i)){
@@ -522,10 +542,7 @@ function clearMarks(){
   renderedMarks.clear();
 }
 
-// Dibuja la raya que tacha la línea ganadora (fila, columna o diagonal).
-// Coordenadas convertidas de % del tablero a unidades del viewBox del SVG,
-// así el ángulo y largo salen correctos sin importar el tamaño en pantalla.
-const VB_W = 808, VB_H = 1600; // debe coincidir con el viewBox de #win-line-svg
+const VB_W = 808, VB_H = 1600;
 
 function showWinLine(line, winnerSymbol){
   if(winnerSymbol === 'draw') { hideWinLine(); return; }
@@ -538,8 +555,6 @@ function showWinLine(line, winnerSymbol){
   let x2 = (endBox.centerX / 100) * VB_W;
   let y2 = (endBox.centerY / 100) * VB_H;
 
-  // estiramos un poco cada punta para que cruce de lado a lado, no que
-  // solo una los centros de las celdas de las puntas
   const dx = x2 - x1, dy = y2 - y1;
   const len = Math.hypot(dx, dy) || 1;
   const ext = len * 0.18;
@@ -559,7 +574,6 @@ function showWinLine(line, winnerSymbol){
   winLineEl.style.strokeDasharray = fullLen;
   winLineEl.style.strokeDashoffset = fullLen;
 
-  // forzamos reflow para que el próximo cambio sí anime
   void winLineEl.getBoundingClientRect();
 
   requestAnimationFrame(() => {
@@ -574,7 +588,7 @@ function hideWinLine(){
 }
 
 // ===================================================
-// Jugadas (con transacción para evitar condiciones de carrera)
+// Jugadas
 // ===================================================
 function jugar(i){
   if(!roomRef || !mySymbol) return;
@@ -599,11 +613,17 @@ function jugar(i){
 }
 
 function pedirRevancha(){
+  reiniciarPartida();
+}
+
+// Reinicia el tablero de la sala actual (misma sala, se vuelve a tirar la
+// moneda). Sirve tanto para "Revancha" (cuando ya terminó) como para el
+// botón de reiniciar en medio de una partida.
+function reiniciarPartida(){
   if(!roomRef) return;
   roomRef.transaction((room) => {
     if(!room) return room;
 
-    // se vuelve a tirar la moneda para ver quién arranca
     const players = room.players;
     const creatorStarts = Math.random() < 0.5;
     room.symbols = {

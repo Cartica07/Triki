@@ -71,11 +71,17 @@
     </section>
 
     <!-- HUD del juego (flota sobre el tablero, no tapa la grilla) -->
+    <!-- HUD del juego (flota sobre el tablero, no tapa la grilla) -->
     <div id="view-game" class="view game-hud">
       <div class="game-header">
         <span class="tag">Sala <strong id="room-code-tag"></strong></span>
         <h2 class="game-title">Triki <span>Frente</span></h2>
         <span class="tag" id="turn-indicator">—</span>
+
+        <!-- NUEVO BOTÓN -->
+        <button id="btn-restart-match" class="btn btn-secondary">
+          Reiniciar partida
+        </button>
       </div>
 
       <div id="game-result" class="result hidden">
