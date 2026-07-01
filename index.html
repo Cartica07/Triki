@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Triki Online</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=Permanent+Marker&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="rotate-warning">
+  <p>Girá el teléfono 📱<br><span>Este juego es solo vertical</span></p>
+</div>
+
+<div id="app">
+
+  <!-- El escenario: SIEMPRE es la foto, con el mismo aspect-ratio en toda la app -->
+  <div class="board-stage" id="board-stage">
+
+    <!-- Zonas táctiles + marcas, solo activas en la vista de juego -->
+    <div id="board" class="board-hitlayer">
+      <svg id="win-line-svg" class="win-line-svg" viewBox="0 0 808 1600" preserveAspectRatio="none">
+        <line id="win-line" x1="0" y1="0" x2="0" y2="0"></line>
+      </svg>
+    </div>
+
+    <!-- VISTA: HOME -->
+    <section id="view-home" class="view active">
+      <div class="panel">
+        <h1 class="app-title">TRIKI<span>·</span>ONLINE</h1>
+        <p class="lede">Creá una partida y compartí el código. Cuando alguien entre, arrancan.</p>
+
+        <button id="btn-crear" class="btn btn-primary">Crear partida</button>
+
+        <div class="divider"><span>o unite a una</span></div>
+
+        <form id="form-unirse" autocomplete="off">
+          <input id="input-code" class="code-input" maxlength="4" placeholder="CÓDIGO" autocapitalize="characters">
+          <button type="submit" class="btn btn-secondary">Unirse</button>
+        </form>
+
+        <p id="home-error" class="error"></p>
+      </div>
+    </section>
+
+    <!-- VISTA: SALA DE ESPERA -->
+    <section id="view-waiting" class="view">
+      <div class="panel">
+        <p class="lede">Compartí este código con tu rival:</p>
+
+        <div class="room-code" id="room-code-display">
+          <span class="code-cell">?</span>
+          <span class="code-cell">?</span>
+          <span class="code-cell">?</span>
+          <span class="code-cell">?</span>
+        </div>
+
+        <div class="share-row">
+          <button id="btn-share" class="btn btn-secondary">Compartir link 🔗</button>
+        </div>
+
+        <p class="hint">
+          <span class="dot-pulse"></span>
+          Esperando a que se una un jugador
+        </p>
+
+        <button id="btn-cancel-wait" class="btn btn-ghost">Cancelar</button>
+      </div>
+    </section>
+
+    <!-- HUD del juego (flota sobre el tablero, no tapa la grilla) -->
+    <div id="view-game" class="view game-hud">
+      <div class="game-header">
+        <span class="tag">Sala <strong id="room-code-tag"></strong></span>
+        <span class="tag" id="turn-indicator">—</span>
+      </div>
+
+      <div id="game-result" class="result hidden">
+        <div class="panel panel-compact">
+          <p id="result-text"></p>
+          <div class="result-actions">
+            <button id="btn-rematch" class="btn btn-primary">Revancha</button>
+            <button id="btn-leave" class="btn btn-ghost">Salir</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="site-footer">
+    <span id="connection-status" class="conn-status">conectando…</span>
+  </footer>
+
+</div>
+
+<div id="credit-badge" class="credit-badge">
+  <p>Creado por: <strong>Carta</strong></p>
+  <p>IG: <strong>Alexander.cv7</strong></p>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
