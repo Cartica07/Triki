@@ -577,7 +577,7 @@ function syncMarks(board, winLine){
       span.style.top = box.centerY + '%';
       span.dataset.i = i;
       boardLayer.appendChild(span);
-      sonidoPoner.currentTime = 0.04;
+      sonidoPoner.currentTime = 0.06;
       sonidoPoner.play().catch(() => {});
       renderedMarks.add(i);
     }
