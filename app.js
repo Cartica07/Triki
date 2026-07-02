@@ -313,7 +313,14 @@ async function unirsePartida(code){
     }
 
     if(room.players.creator === clientId || room.players.joiner === clientId){
-      entrarASala(code);
+      await ref.remove().catch(() => {});
+
+      homeError.textContent =
+        'Ese link de invitación ya no es válido (Crea nueva partida).';
+
+      limpiarCodigoDeUrl();
+      inputCode.value = '';
+
       return;
     }
 
