@@ -34,6 +34,7 @@ const GRID_Y = [20.6, 30.0, 40.4, 51.9];
 
 const sonidoPoner = new Audio('poner.mp3');
 sonidoPoner.preload = 'auto';
+let soundEnabled = true;
 
 document.addEventListener('click', () => {
   sonidoPoner.play()
@@ -116,6 +117,17 @@ function init(){
 
   const params = new URLSearchParams(location.search);
   const codeFromUrl = params.get('code');
+
+  const btnSound = document.getElementById('btn-sound');
+
+  btnSound.addEventListener('click', () => {
+
+      soundEnabled = !soundEnabled;
+
+      btnSound.textContent =
+          soundEnabled ? '🔊' : '🔇';
+  });
+
   if(codeFromUrl){
     inputCode.value = codeFromUrl.toUpperCase();
   }
@@ -589,8 +601,10 @@ function syncMarks(board, winLine){
       span.style.top = box.centerY + '%';
       span.dataset.i = i;
       boardLayer.appendChild(span);
-      sonidoPoner.currentTime = 0.06;
-      sonidoPoner.play().catch(() => {});
+      if(soundEnabled){
+          sonidoPoner.currentTime = 0.06;
+          sonidoPoner.play().catch(() => {});
+      }
       renderedMarks.add(i);
     }
   });
@@ -668,8 +682,10 @@ function jugar(i){
     if(room.board[i]) return room;
 
     room.board[i] = mySymbol;
-    sonidoPoner.currentTime = 0;
-    sonidoPoner.play().catch(() => {});
+    if(soundEnabled){
+        sonidoPoner.currentTime = 0.06;
+        sonidoPoner.play().catch(() => {});
+    }
     room.lastActivity = Date.now();
 
     const winInfo = checkWinner(room.board);

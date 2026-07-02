@@ -447,3 +447,34 @@ body{
 #btn-restart-match:active{
   transform: scale(.96);
 }
+
+.sound-row{
+    display:flex;
+    justify-content:flex-start;
+    margin-top:8px;
+    margin-left:4px;
+}
+
+.sound-btn{
+    width:48px;
+    height:48px;
+    border:none;
+    border-radius:14px;
+
+    background:rgba(18,18,24,.92);
+    backdrop-filter:blur(10px);
+
+    font-size:24px;
+    cursor:pointer;
+
+    color:white;
+
+    box-shadow:
+      0 8px 20px rgba(0,0,0,.35);
+
+    transition:.15s;
+}
+
+.sound-btn:active{
+    transform:scale(.95);
+}
