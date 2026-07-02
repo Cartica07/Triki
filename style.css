@@ -372,7 +372,7 @@ body{
 }
 .tag strong{ color: var(--o-color); letter-spacing:0.06em; }
 
-.result{ width:100%; display:flex; justify-content:center; }
+.result{ width:100%; display:flex; justify-content:center; margin-bottom: 60px;}
 .result.hidden{ display:none; }
 #result-text{
   font-family:'Space Grotesk', sans-serif;
@@ -416,6 +416,38 @@ body{
   color: #ffb347;
   font-weight: 700;
 }
+
+
+.share-game-btn{
+  position: fixed;
+
+  left: 10px;
+
+  bottom: calc(62px + env(safe-area-inset-bottom));
+
+  z-index: 50;
+
+  background: rgba(13, 15, 19, 0.92);
+
+  border: 1.5px solid #c8842b;
+  border-radius: 10px;
+
+  padding: 7px 12px;
+
+  font-family:'Space Grotesk', sans-serif;
+  font-size: 0.68rem;
+  font-weight:700;
+
+  color: #ffb347;
+
+  cursor:pointer;
+
+  transition: transform .12s ease;
+}
+
+.share-game-btn:active{
+  transform: scale(.96);
+}
 /* ---------- botón reiniciar partida ---------- */
 /* ---------- botón reiniciar partida ---------- */
 
@@ -448,31 +480,30 @@ body{
   transform: scale(.96);
 }
 
-.sound-row{
-    display:flex;
-    justify-content:flex-start;
-    margin-top:8px;
-    margin-left:4px;
+
+.game-header{
+    position: relative;
 }
 
 .sound-btn{
-    width:48px;
-    height:48px;
-    border:none;
-    border-radius:14px;
+    position: absolute;
 
-    background:rgba(18,18,24,.92);
-    backdrop-filter:blur(10px);
+    left: 0;
+    top: 100%;
 
-    font-size:24px;
-    cursor:pointer;
+    margin-top: 10px;
 
-    color:white;
+    width: 42px;
+    height: 42px;
 
-    box-shadow:
-      0 8px 20px rgba(0,0,0,.35);
+    border: none;
+    border-radius: 12px;
 
-    transition:.15s;
+    background: rgba(20,20,25,.92);
+    color: #fff;
+
+    font-size: 20px;
+    cursor: pointer;
 }
 
 .sound-btn:active{

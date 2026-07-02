@@ -95,6 +95,7 @@ const btnRematch = document.getElementById('btn-rematch');
 const btnLeave = document.getElementById('btn-leave');
 const connStatus = document.getElementById('connection-status');
 const btnRestartMatch = document.getElementById('btn-restart-match');
+const shareGameBtn = document.getElementById('share-game-btn');
 
 // ===================================================
 // Arranque
@@ -103,7 +104,7 @@ init();
 
 function init(){
   buildCells();
-
+  shareGameBtn.addEventListener('click', compartirJuego);
   try{
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.database();
@@ -737,4 +738,42 @@ function checkWinner(board){
   }
   if(board.every(v => v)) return { winner: 'draw', line: null };
   return null;
+}
+
+async function compartirJuego(){
+
+  const url = 'https://triki-frente.vercel.app/';
+
+  try{
+
+    if(navigator.share){
+
+      await navigator.share({
+        title: 'Triki Frente',
+        text: 'Jugá Triki Frente online',
+        url: url
+      });
+
+      return;
+    }
+
+    throw new Error();
+
+  }catch(err){
+
+    try{
+      await navigator.clipboard.writeText(url);
+
+      const original = shareGameBtn.textContent;
+
+      shareGameBtn.textContent = '¡Link copiado!';
+
+      setTimeout(() => {
+        shareGameBtn.textContent = original;
+      }, 1500);
+
+    }catch(e){
+      alert(url);
+    }
+  }
 }
